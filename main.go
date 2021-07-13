@@ -44,6 +44,7 @@ func generateCaptchaHandler(w http.ResponseWriter, r *http.Request) {
 	id, b64s, err := c.Generate()
 	if err != nil {
 		serveJSONError(w, err)
+		return
 	}
 	data = genRes{
 		ID:      id,
@@ -66,6 +67,7 @@ func captchaVerifyHandler(w http.ResponseWriter, r *http.Request) {
 	//verify the captcha
 	if !store.Verify(param.ID, param.VerifyValue, true) {
 		serveJSONObject(w, http.StatusForbidden, "Captcha verification failed", nil, nil, false)
+		return
 	}
 
 	serveJSONObject(w, http.StatusOK, "Captcha verified", nil, nil, true)
