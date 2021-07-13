@@ -50,7 +50,7 @@ func generateCaptchaHandler(w http.ResponseWriter, r *http.Request) {
 		Captcha: b64s,
 	}
 
-	serveJSONObject(w, http.StatusOK, "Captcha generated successfully", data, nil, true)
+	serveJSONObject(w, http.StatusOK, "Captcha generated", data, nil, true)
 }
 
 // base64Captcha verify http handler
