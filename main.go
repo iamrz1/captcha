@@ -37,25 +37,20 @@ func generateCaptchaHandler(w http.ResponseWriter, r *http.Request) {
 	var driver base64Captcha.Driver
 
 	data := genRes{}
-	var body map[string]interface{}
 	//create base64 encoding captcha
 	//driver = base64Captcha.NewDriverString(80, 240, 20, 100, 2, 5, nil, fontsAll)
 	driver = base64Captcha.DefaultDriverDigit
 	c := base64Captcha.NewCaptcha(driver, store)
 	id, b64s, err := c.Generate()
 	if err != nil {
-		log.Println(err.Error())
-		body = map[string]interface{}{"success": false, "data": data, "message": "Something went wrong"}
-	} else {
-		data = genRes{
-			ID:      id,
-			Captcha: b64s,
-		}
-		body = map[string]interface{}{"success": true, "data": data, "message": "Captcha generated successfully"}
+		serveJSONError(w, err)
+	}
+	data = genRes{
+		ID:      id,
+		Captcha: b64s,
 	}
 
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(w).Encode(body)
+	serveJSONObject(w, http.StatusOK, "Captcha generated successfully", data, nil, true)
 }
 
 // base64Captcha verify http handler
@@ -69,25 +64,16 @@ func captchaVerifyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 	//verify the captcha
-	body := map[string]interface{}{"success": false, "message": "Captcha generated successfully"}
-	if store.Verify(param.ID, param.VerifyValue, true) {
-		body = map[string]interface{}{"success": true, "message": "Captcha verified"}
+	if !store.Verify(param.ID, param.VerifyValue, true) {
+		serveJSONObject(w, http.StatusForbidden, "Captcha verification failed", nil, nil, false)
 	}
 
-	//set json response
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-
-	json.NewEncoder(w).Encode(body)
+	serveJSONObject(w, http.StatusOK, "Captcha verified", nil, nil, true)
 }
 
 //start a net/http server
 func main() {
 	godotenv.Load()
-	//api for create captcha
-	http.HandleFunc("/api/v1/get-captcha", generateCaptchaHandler)
-
-	//api for verify captcha
-	http.HandleFunc("/api/v1/verify-captcha", captchaVerifyHandler)
 
 	port := os.Getenv("REST_PORT")
 	if port == "" {
@@ -246,5 +232,42 @@ func stop(server *http.Server) error {
 	}
 
 	log.Println("shutting down")
+	return nil
+}
+
+func serveJSONError(w http.ResponseWriter, err error) {
+	log.Println(err.Error())
+	serveJSONObject(w, http.StatusInternalServerError, "Something went wrong", nil, nil, false)
+	return
+}
+
+func serveJSONObject(w http.ResponseWriter, status int, message string, data interface{}, meta interface{}, success bool) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Header().Add("Access-Control-Allow-Origin", "*")
+
+	var resp interface{}
+	var obj interface{}
+	type EmptyObject struct{}
+	if data == nil {
+		obj = map[string]interface{}{
+			"object": EmptyObject{},
+		}
+	} else {
+		obj = map[string]interface{}{
+			"object": data,
+		}
+	}
+
+	resp = &map[string]interface{}{
+		"message": message,
+		"success": success,
+		"data":    obj,
+	}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		return err
+	}
+
 	return nil
 }
