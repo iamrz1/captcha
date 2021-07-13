@@ -13,15 +13,20 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 )
 
-//configJsonBody json request body.
-type configJsonBody struct {
-	Id          string
-	VerifyValue string
+//genRes json request body.
+type genRes struct {
+	ID      string `json:"id"`
+	Captcha string `json:"captcha"`
+}
+
+//verifyReq json request body.
+type verifyReq struct {
+	ID          string `json:"id"`
+	VerifyValue string `json:"value"`
 }
 
 var store = base64Captcha.DefaultMemStore
@@ -31,29 +36,33 @@ func generateCaptchaHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	var driver base64Captcha.Driver
 
+	data := genRes{}
+	var body map[string]interface{}
 	//create base64 encoding captcha
 	//driver = base64Captcha.NewDriverString(80, 240, 20, 100, 2, 5, nil, fontsAll)
 	driver = base64Captcha.DefaultDriverDigit
 	c := base64Captcha.NewCaptcha(driver, store)
 	id, b64s, err := c.Generate()
-
-	b64s = strings.TrimPrefix(b64s, "data:")
-
-	body := map[string]interface{}{"success": true, "data": b64s, "captcha_id": id, "message": "Captcha generated successfully"}
 	if err != nil {
 		log.Println(err.Error())
-		body = map[string]interface{}{"success": false, "data": b64s, "captcha_id": id, "message": "Something went wrong"}
+		body = map[string]interface{}{"success": false, "data": data, "message": "Something went wrong"}
+	} else {
+		data = genRes{
+			ID:      id,
+			Captcha: b64s,
+		}
+		body = map[string]interface{}{"success": true, "data": data, "message": "Captcha generated successfully"}
 	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(body)
 }
 
 // base64Captcha verify http handler
 func captchaVerifyHandler(w http.ResponseWriter, r *http.Request) {
-
 	//parse request json body
 	decoder := json.NewDecoder(r.Body)
-	var param configJsonBody
+	var param verifyReq
 	err := decoder.Decode(&param)
 	if err != nil {
 		log.Println(err)
@@ -61,7 +70,7 @@ func captchaVerifyHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	//verify the captcha
 	body := map[string]interface{}{"success": false, "message": "Captcha generated successfully"}
-	if store.Verify(param.Id, param.VerifyValue, true) {
+	if store.Verify(param.ID, param.VerifyValue, true) {
 		body = map[string]interface{}{"success": true, "message": "Captcha verified"}
 	}
 
@@ -226,7 +235,6 @@ func HandleSignals(sigs []os.Signal, gracefulHandler, forceHandler func() error)
 		}
 	}
 }
-
 
 func stop(server *http.Server) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(30)*time.Second)
